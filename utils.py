@@ -466,11 +466,12 @@ def display_conversation_history(df, limit=5):
     history = memory_manager.get_conversation_history(session_id, limit)
     
     if history:
-        st.markdown("#### 📚 对话历史")
         for i, conv in enumerate(history):
             question_preview = conv['question'][:50] if len(conv['question']) > 50 else conv['question']
-            with st.expander(f"💬 问题 {i+1}: {question_preview}...", expanded=False):
-                st.markdown(f"**问题:** {conv['question']}")
+            st.markdown(f"**💬 问题 {i+1}:** {question_preview}...")
+            
+            with st.container():
+                st.markdown(f"**完整问题:** {conv['question']}")
                 try:
                     answer_data = json.loads(conv['answer'])
                     if "answer" in answer_data:
@@ -484,6 +485,7 @@ def display_conversation_history(df, limit=5):
                     st.markdown(f"**回答:** {conv['answer']}")
                 
                 st.caption(f"⏱️ 响应时间: {conv['response_time']:.2f}秒 | 🕐 时间: {conv['timestamp']}")
+                st.divider()
     else:
         st.info("暂无对话历史")
 
@@ -493,7 +495,6 @@ def display_popular_questions(df, limit=5):
     popular = memory_manager.get_popular_questions(data_hash, limit)
     
     if popular:
-        st.markdown("#### 🔥 热门问题")
         for i, item in enumerate(popular):
             col1, col2 = st.columns([4, 1])
             with col1:
