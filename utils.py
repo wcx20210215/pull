@@ -7,10 +7,13 @@ Date: 2025/6/25
 """
 import json
 import streamlit as st
+import time
+from typing import List, Dict, Any, Generator
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain.schema import HumanMessage, AIMessage
 
 PROMPT_TEMPLATE = """数据分析助手登场！🚀数据分析就像一场冒险，而我就是你的向导。✨下面是我的魔法指南，让我们一起探索数据的奥秘：
 
@@ -175,3 +178,176 @@ def multi_model_analysis(df, query, models=["gpt-4o", "gpt-4o-mini"]):
         primary_result["answer"] += f" (基于{len(results)}个模型的分析结果)"
     
     return primary_result
+
+
+# ==================== 对话历史管理和流式响应功能 ====================
+
+def initialize_conversation_memory():
+    """初始化对话记忆"""
+    if "conversation_history" not in st.session_state:
+        st.session_state.conversation_history = []
+    if "current_conversation_id" not in st.session_state:
+        st.session_state.current_conversation_id = int(time.time())
+
+def add_message_to_memory(message: str, role: str = "user"):
+    """将消息添加到对话记忆中
+    
+    Args:
+        message: 消息内容
+        role: 角色，"user" 或 "assistant"
+    """
+    initialize_conversation_memory()
+    
+    message_data = {
+        "role": role,
+        "content": message,
+        "timestamp": time.time(),
+        "conversation_id": st.session_state.current_conversation_id
+    }
+    
+    st.session_state.conversation_history.append(message_data)
+    
+    # 限制历史记录长度，保留最近20条消息
+    if len(st.session_state.conversation_history) > 20:
+        st.session_state.conversation_history = st.session_state.conversation_history[-20:]
+
+def get_conversation_history() -> List[Dict[str, Any]]:
+    """获取完整的对话历史
+    
+    Returns:
+        对话历史列表
+    """
+    initialize_conversation_memory()
+    return st.session_state.conversation_history
+
+def clear_conversation_history():
+    """清空对话历史"""
+    st.session_state.conversation_history = []
+    st.session_state.current_conversation_id = int(time.time())
+
+def format_conversation_for_ai(df) -> str:
+    """将对话历史格式化为AI可理解的上下文
+    
+    Args:
+        df: 当前数据框
+        
+    Returns:
+        格式化的对话上下文
+    """
+    history = get_conversation_history()
+    
+    if not history:
+        return ""
+    
+    context = "\n\n=== 对话历史上下文 ===\n"
+    
+    # 只包含最近5轮对话
+    recent_history = history[-10:] if len(history) > 10 else history
+    
+    for msg in recent_history:
+        role_name = "用户" if msg["role"] == "user" else "AI助手"
+        context += f"{role_name}: {msg['content']}\n"
+    
+    context += "\n=== 当前数据集信息 ===\n"
+    context += f"行数: {len(df)}, 列数: {len(df.columns)}\n"
+    context += f"列名: {', '.join(df.columns.tolist())}\n"
+    context += "\n请基于以上对话历史和当前问题提供连贯的回答。\n\n"
+    
+    return context
+
+def stream_dataframe_agent(df, query: str, model_choice: str = "gpt-4o-mini") -> Generator[str, None, None]:
+    """流式数据分析智能体
+    
+    Args:
+        df: 数据框
+        query: 用户查询
+        model_choice: 模型选择
+        
+    Yields:
+        流式响应的文本块
+    """
+    try:
+        # 添加用户消息到记忆
+        add_message_to_memory(query, "user")
+        
+        # 获取对话历史上下文
+        conversation_context = format_conversation_for_ai(df)
+        
+        # 构建增强的查询
+        enhanced_query = conversation_context + PROMPT_TEMPLATE + f"""
+        
+        数据集信息：
+        - 行数：{len(df)}
+        - 列数：{len(df.columns)}
+        - 列名：{', '.join(df.columns.tolist())}
+        - 数值列：{', '.join(df.select_dtypes(include=['number']).columns.tolist())}
+        - 文本列：{', '.join(df.select_dtypes(include=['object']).columns.tolist())}
+        
+        用户问题：{query}
+        
+        请根据以上信息和对话历史提供准确、有用的分析结果。
+        """
+        
+        # 获取模型
+        model = get_enhanced_model(model_choice)
+        
+        # 创建智能体
+        agent = create_pandas_dataframe_agent(
+            llm=model,
+            df=df,
+            verbose=True,
+            allow_dangerous_code=True
+        )
+        
+        # 流式执行分析
+        full_response = ""
+        
+        # 由于langchain的agent不直接支持流式，我们模拟流式输出
+        yield "🤔 正在分析数据...\n"
+        time.sleep(0.5)
+        
+        yield "📊 正在处理查询...\n"
+        time.sleep(0.5)
+        
+        # 执行分析
+        response = agent.invoke({"input": enhanced_query})
+        result_text = response["output"]
+        
+        yield "✨ 分析完成，正在生成回答...\n\n"
+        time.sleep(0.3)
+        
+        # 模拟逐字输出
+        words = result_text.split()
+        for i, word in enumerate(words):
+            yield word + " "
+            if i % 3 == 0:  # 每3个词暂停一下
+                time.sleep(0.1)
+        
+        full_response = result_text
+        
+        # 将AI响应添加到记忆
+        add_message_to_memory(full_response, "assistant")
+        
+    except Exception as e:
+        error_msg = f"❌ 分析过程中出现错误: {str(e)}"
+        yield error_msg
+        add_message_to_memory(error_msg, "assistant")
+
+def display_conversation_history():
+    """显示对话历史"""
+    history = get_conversation_history()
+    
+    if not history:
+        st.info("暂无对话历史")
+        return
+    
+    st.markdown("### 💬 对话历史")
+    
+    for msg in history:
+        role_icon = "🧑‍💻" if msg["role"] == "user" else "🤖"
+        role_name = "用户" if msg["role"] == "user" else "AI助手"
+        
+        with st.chat_message(msg["role"]):
+             st.markdown(f"**{role_icon} {role_name}**")
+             st.markdown(msg["content"])
+             st.caption(f"时间: {time.strftime('%H:%M:%S', time.localtime(msg['timestamp']))}")
