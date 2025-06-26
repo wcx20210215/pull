@@ -7,7 +7,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 import streamlit as st
-from utils import dataframe_agent
+from utils import (dataframe_agent, get_session_id, display_conversation_history, 
+                   display_popular_questions, get_memory_stats, memory_manager, 
+                   streaming_handler, clear_session_memory, clear_all_memory)
 from datetime import datetime
 import io
 import json
@@ -664,6 +666,23 @@ if "df" in st.session_state:
     elif function_choice == "AI问答":
         st.subheader("🤖 AI智能问答")
         
+        # 获取会话ID
+        session_id = get_session_id()
+        
+        # 记忆统计信息
+        memory_stats = get_memory_stats(df)
+        
+        # 顶部统计卡片
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("💬 本次对话", memory_stats["session_count"])
+        with col2:
+            st.metric("⚡ 快速回答", memory_stats["quick_answers_count"])
+        with col3:
+            st.metric("📊 总对话数", memory_stats["total_conversations"])
+        with col4:
+            st.metric("⏱️ 平均响应", f"{memory_stats['avg_response_time']:.2f}s")
+        
         # 数据概览卡片
         with st.expander("📊 当前数据概览", expanded=False):
             col1, col2, col3, col4 = st.columns(4)
@@ -679,6 +698,37 @@ if "df" in st.session_state:
                 st.metric("文本列", categorical_cols)
             
             st.write("**列名预览:**", ", ".join(df.columns[:10].tolist()) + ("..." if len(df.columns) > 10 else ""))
+        
+        # 侧边栏：对话历史和热门问题
+        with st.sidebar:
+            st.markdown("---")
+            
+            # 对话历史
+            with st.expander("📚 对话历史", expanded=False):
+                display_conversation_history(df, limit=3)
+            
+            # 热门问题
+            with st.expander("🔥 热门问题", expanded=False):
+                display_popular_questions(df, limit=3)
+            
+            # 清除记忆按钮
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🗑️ 清除会话记忆"):
+                    deleted_count = clear_session_memory(session_id)
+                    st.success(f"已清除 {deleted_count} 条会话记忆！")
+                    st.rerun()
+            with col2:
+                if st.button("💥 清除所有记忆"):
+                    if st.session_state.get('confirm_clear_all', False):
+                        clear_all_memory()
+                        st.success("所有记忆已清除！")
+                        st.session_state.confirm_clear_all = False
+                        st.rerun()
+                    else:
+                        st.session_state.confirm_clear_all = True
+                        st.warning("再次点击确认清除所有记忆")
+                        st.rerun()
         
         # 快速问题模板 - 增强版
         st.markdown("#### 💡 智能问题模板")
@@ -717,6 +767,12 @@ if "df" in st.session_state:
             ["自定义问题"] + list(template_categories.keys())
         )
         
+        # 检查是否选择了热门问题
+        initial_query = ""
+        if "selected_question" in st.session_state:
+            initial_query = st.session_state.selected_question
+            del st.session_state.selected_question
+        
         if selected_category != "自定义问题":
             selected_template = st.selectbox(
                 "选择具体问题", 
@@ -724,13 +780,14 @@ if "df" in st.session_state:
             )
             query = st.text_area(
                 "💬 请输入你关于数据集的问题或可视化需求：",
-                value=selected_template,
+                value=initial_query or selected_template,
                 height=100,
                 help="你可以修改模板问题或直接使用"
             )
         else:
             query = st.text_area(
                 "💬 请输入你关于数据集的问题或可视化需求：",
+                value=initial_query,
                 placeholder="例如：显示销售额最高的前5个地区的柱状图，并分析其趋势",
                 height=100,
                 help="支持中文问题，可以要求生成图表、表格或进行数据分析"
@@ -738,7 +795,7 @@ if "df" in st.session_state:
         
         # 高级选项
         with st.expander("⚙️ 高级选项", expanded=False):
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 response_format = st.selectbox(
                     "期望的回答格式",
@@ -748,6 +805,27 @@ if "df" in st.session_state:
                 analysis_depth = st.selectbox(
                     "分析深度",
                     ["标准", "详细", "简洁"]
+                )
+            with col3:
+                enable_streaming = st.checkbox(
+                    "🌊 流式输出",
+                    value=True,
+                    help="启用流式输出可以实时看到AI的思考过程"
+                )
+            
+            # 记忆选项
+            col1, col2 = st.columns(2)
+            with col1:
+                use_memory = st.checkbox(
+                    "🧠 启用记忆",
+                    value=True,
+                    help="启用记忆功能可以快速回答相同问题"
+                )
+            with col2:
+                show_cache_info = st.checkbox(
+                    "📊 显示缓存信息",
+                    value=False,
+                    help="显示是否使用了缓存回答"
                 )
         
         # 生成回答按钮
@@ -763,45 +841,88 @@ if "df" in st.session_state:
             if analysis_depth != "标准":
                 enhanced_query += f" (分析深度：{analysis_depth})"
             
+            # 检查是否有快速回答
+            data_hash = memory_manager.get_data_hash(df)
+            quick_answer = None
+            if use_memory:
+                quick_answer = memory_manager.get_quick_answer(enhanced_query, data_hash)
+            
+            # 显示缓存信息
+            if show_cache_info and quick_answer and quick_answer["found"]:
+                st.info(f"⚡ 找到快速回答！已使用 {quick_answer['hit_count']} 次")
+            
+            # 创建结果容器
+            result_container = st.container()
+            
             with st.spinner("🤔 AI正在深度分析中，请稍等..."):
                 start_time = time.time()
-                result = dataframe_agent(df, enhanced_query)
+                
+                # 准备流式输出容器
+                stream_container = None
+                if enable_streaming and not (quick_answer and quick_answer["found"]):
+                    stream_container = st.empty()
+                
+                # 调用增强的dataframe_agent
+                result = dataframe_agent(
+                    df=df, 
+                    query=enhanced_query,
+                    session_id=session_id,
+                    use_cache=use_memory,
+                    enable_streaming=enable_streaming,
+                    stream_container=stream_container
+                )
+                
                 end_time = time.time()
                 
-                st.markdown("### 🎯 AI分析结果")
+                # 清除流式输出容器
+                if stream_container:
+                    stream_container.empty()
                 
-                # 显示处理时间
-                st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
-                
-                if "answer" in result:
-                    st.success(result["answer"])
-                
-                if "table" in result:
-                    st.markdown("#### 📊 数据表格")
-                    result_df = pd.DataFrame(result["table"]["data"],
-                                           columns=result["table"]["columns"])
-                    st.dataframe(result_df, use_container_width=True)
+                with result_container:
+                    st.markdown("### 🎯 AI分析结果")
                     
-                    # 添加导出选项
-                    csv = result_df.to_csv(index=False, encoding='utf-8-sig')
-                    st.download_button(
-                        label="📥 下载表格数据",
-                        data=csv,
-                        file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
-                    )
-                
-                if "bar" in result:
-                    st.markdown("#### 📊 柱状图分析")
-                    create_chart(result["bar"], "bar")
-                
-                if "line" in result:
-                    st.markdown("#### 📈 趋势分析")
-                    create_chart(result["line"], "line")
-                
-                if "pie" in result:
-                    st.markdown("#### 🥧 饼图分析")
-                    create_chart(result["pie"], "pie")
+                    # 显示处理时间和缓存状态
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
+                    with col2:
+                        if quick_answer and quick_answer["found"]:
+                            st.caption("⚡ 快速回答")
+                        else:
+                            st.caption("🆕 新分析")
+                    with col3:
+                        if use_memory:
+                            st.caption("🧠 已保存到记忆")
+                    
+                    if "answer" in result:
+                        st.success(result["answer"])
+                    
+                    if "table" in result:
+                        st.markdown("#### 📊 数据表格")
+                        result_df = pd.DataFrame(result["table"]["data"],
+                                               columns=result["table"]["columns"])
+                        st.dataframe(result_df, use_container_width=True)
+                        
+                        # 添加导出选项
+                        csv = result_df.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button(
+                            label="📥 下载表格数据",
+                            data=csv,
+                            file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    
+                    if "bar" in result:
+                        st.markdown("#### 📊 柱状图分析")
+                        create_chart(result["bar"], "bar")
+                    
+                    if "line" in result:
+                        st.markdown("#### 📈 趋势分析")
+                        create_chart(result["line"], "line")
+                    
+                    if "pie" in result:
+                        st.markdown("#### 🥧 饼图分析")
+                        create_chart(result["pie"], "pie")
                 
                 # 添加反馈机制
                 st.markdown("---")
