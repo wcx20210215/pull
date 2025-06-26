@@ -468,7 +468,8 @@ def display_conversation_history(df, limit=5):
     if history:
         st.markdown("#### 📚 对话历史")
         for i, conv in enumerate(history):
-            with st.expander(f"💬 问题 {i+1}: {conv['question'][:50]}...", expanded=False):
+            question_preview = conv['question'][:50] if len(conv['question']) > 50 else conv['question']
+            with st.expander(f"💬 问题 {i+1}: {question_preview}...", expanded=False):
                 st.markdown(f"**问题:** {conv['question']}")
                 try:
                     answer_data = json.loads(conv['answer'])
