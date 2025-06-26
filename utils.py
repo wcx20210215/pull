@@ -6,88 +6,43 @@ Version: 0.1
 Date: 2025/6/25
 """
 import json
-import re
 import streamlit as st
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
-PROMPT_TEMPLATE = """你是一个专业的数据分析助手。请严格按照以下格式要求回答用户问题：
+PROMPT_TEMPLATE = """数据分析助手登场！🚀数据分析就像一场冒险，而我就是你的向导。✨下面是我的魔法指南，让我们一起探索数据的奥秘：
 
-**重要：你的回答必须是有效的JSON格式，不能包含任何其他文本！**
+1. **思考阶段 (Thought)** ：首先，我会像侦探一样分析你的请求类型（文字回答/表格/图表），并验证数据是否合适。🔍
 
-根据用户问题类型，选择以下其中一种JSON格式回答：
+2. **行动阶段 (Action)** ：根据分析结果，我会用以下魔法格式来回应你：✨
+   - **纯文字回答**：（简洁明了，绝不啰嗦）
+     {"answer": "不超过50个字符的明确答案"}👏
 
-1. **纯文字回答**：
-{"answer": "你的分析结果"}
+   - **表格数据**：（整齐排列，一目了然）
+     {"table":{"columns":["列名1", "列名2", ...], "data":[["第一行值1", "值2", ...], ["第二行值1", "值2", ...]]}}📊
 
-2. **表格数据**：
-{"table": {"columns": ["列名1", "列名2"], "data": [["值1", "值2"], ["值3", "值4"]]}}
+   - **柱状图**：（直观展示，高低立现）
+     {"bar":{"columns": ["A", "B", "C", ...], "data":[35, 42, 29, ...]}}📈
 
-3. **柱状图数据**：
-{"bar": {"columns": ["类别1", "类别2"], "data": [数值1, 数值2]}}
+   - **折线图**：（趋势尽显，一目了然）
+     {"line":{"columns": ["A", "B", "C", ...], "data": [35, 42, 29, ...]}}📈
 
-4. **折线图数据**：
-{"line": {"columns": ["时间1", "时间2"], "data": [数值1, 数值2]}}
+3. **格式校验要求**：（别担心，我会小心谨慎，确保万无一失）🛡️
+   - 字符串值必须使用英文双引号（别问我为什么，这是规矩）🤔
+   - 数值类型不得添加引号（数字就是数字，不需要伪装）🚫
+   - 确保数组闭合无遗漏（我可不想漏掉任何重要信息）✅
 
-5. **饼图数据**：
-{"pie": {"columns": ["类别1", "类别2"], "data": [数值1, 数值2]}}
+   错误案例：（反面教材，千万别学）💩
+   {'columns':['Product', 'Sales'], data:[[A001, 200]]}
 
-**格式要求**：
-- 必须使用英文双引号
-- 字符串值用双引号包围
-- 数值不用引号
-- 确保JSON格式完整有效
-- 不要添加任何解释文字
+   正确案例：（这才是正确的打开方式）👍
+   {"columns":["product", "sales"], "data":[["A001", 200]]}
 
-**示例**：
-正确：{"answer": "销售总额为1000万元"}
-错误：分析结果：{"answer": "销售总额为1000万元"}
+注意：响应数据的"output"中不要有换行符、制表符以及其他格式符号。（保持整洁，是我的原则）🧹
 
 当前用户请求如下：\n"""
-
-
-def clean_and_fix_json(text):
-    """清理和修复JSON格式"""
-    if not text or not isinstance(text, str):
-        return None
-    
-    # 移除可能的前缀和后缀文本
-    text = text.strip()
-    
-    # 查找JSON开始和结束位置
-    json_start = text.find('{')
-    if json_start == -1:
-        return None
-    
-    # 从最后一个}开始向前查找完整的JSON
-    json_end = text.rfind('}') + 1
-    if json_end <= json_start:
-        return None
-    
-    json_text = text[json_start:json_end]
-    
-    # 尝试修复常见的JSON格式问题
-    try:
-        # 移除可能的控制字符
-        json_text = re.sub(r'[\n\r\t]', '', json_text)
-        
-        # 修复单引号为双引号
-        json_text = re.sub(r"(?<!\\)'", '"', json_text)
-        
-        # 修复没有引号的键名
-        json_text = re.sub(r'(\w+):', r'"\1":', json_text)
-        
-        # 尝试解析
-        result = json.loads(json_text)
-        return result
-    except:
-        # 如果修复失败，尝试原始文本
-        try:
-            return json.loads(json_text)
-        except:
-            return None
 
 
 @st.cache_data(ttl=1800)  # 缓存30分钟
@@ -173,27 +128,16 @@ def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True):
     try:
         # 执行分析
         response = agent.invoke({"input": enhanced_prompt})
-        output = response["output"]
+        result = json.loads(response["output"])
         
-        # 打印原始输出用于调试
-        print(f"原始AI输出: {output}")
-        
-        # 使用新的JSON清理函数
-        if output.strip():
-            # 尝试清理和解析JSON
-            cleaned_result = clean_and_fix_json(output)
+        # 验证结果格式
+        if not isinstance(result, dict):
+            raise ValueError("返回结果格式不正确")
             
-            if cleaned_result and isinstance(cleaned_result, dict):
-                return cleaned_result
-            
-            # 如果JSON解析失败，返回文本答案
-            return {"answer": output.strip()}
-        else:
-            return {"answer": "AI返回了空的响应，请重新尝试"}
+        return result
         
     except json.JSONDecodeError as e:
         print(f"JSON解析错误: {e}")
-        print(f"原始输出: {response.get('output', 'No output')}")
         return {"answer": "分析结果格式错误，请重新尝试"}
     except Exception as err:
         print(f"分析错误: {err}")
