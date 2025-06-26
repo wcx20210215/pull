@@ -750,51 +750,6 @@ if "df" in st.session_state:
                     ["标准", "详细", "简洁"]
                 )
         
-        # 对话历史和调试选项
-        col_hist1, col_hist2, col_hist3 = st.columns([2, 1, 1])
-        with col_hist1:
-            show_history = st.checkbox("📜 显示对话历史", value=False)
-        with col_hist2:
-            debug_mode = st.checkbox("🔧 调试模式", value=False, help="显示AI返回的原始数据")
-            if debug_mode:
-                st.session_state.debug_mode = True
-            elif 'debug_mode' in st.session_state:
-                del st.session_state.debug_mode
-        with col_hist3:
-            if st.button("🗑️ 清除历史", help="清除当前数据集的对话历史"):
-                from utils import chat_memory
-                df_hash = chat_memory.generate_hash(str(df.values.tobytes()) + str(df.columns.tolist()))
-                chat_memory.clear_session_history(df_hash)
-                st.success("✅ 对话历史已清除")
-                st.rerun()
-        
-        if show_history:
-            from utils import chat_memory
-            
-            # 生成数据哈希用于获取相关对话
-            df_hash = chat_memory.generate_hash(str(df.values.tobytes()) + str(df.columns.tolist()))
-            history = chat_memory.get_chat_history(df_hash)
-            
-            if history:
-                st.markdown("#### 💬 历史对话")
-                for i, (user_msg, ai_response, timestamp) in enumerate(history[-5:]):  # 显示最近5条
-                    with st.expander(f"对话 {i+1} - {timestamp}", expanded=False):
-                        st.markdown(f"**👤 用户:** {user_msg}")
-                        try:
-                            # 尝试解析AI响应为JSON
-                            import json
-                            ai_data = json.loads(ai_response)
-                            if isinstance(ai_data, dict) and 'answer' in ai_data:
-                                display_response = ai_data['answer']
-                            else:
-                                display_response = ai_response
-                        except:
-                            display_response = ai_response
-                        
-                        st.markdown(f"**🤖 AI:** {display_response[:200]}{'...' if len(display_response) > 200 else ''}")
-            else:
-                st.info("暂无历史对话记录")
-        
         # 生成回答按钮
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -808,15 +763,9 @@ if "df" in st.session_state:
             if analysis_depth != "标准":
                 enhanced_query += f" (分析深度：{analysis_depth})"
             
-            # 创建流式容器
-            stream_container = st.container()
-            
-            start_time = time.time()
-            # 使用流式函数
-            from utils import dataframe_agent_streaming
-            
-            try:
-                result = dataframe_agent_streaming(df, enhanced_query, stream_container=stream_container)
+            with st.spinner("🤔 AI正在深度分析中，请稍等..."):
+                start_time = time.time()
+                result = dataframe_agent(df, enhanced_query)
                 end_time = time.time()
                 
                 st.markdown("### 🎯 AI分析结果")
@@ -824,102 +773,49 @@ if "df" in st.session_state:
                 # 显示处理时间
                 st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
                 
-                # 显示调试信息
-                if "_debug_info" in result:
-                    with st.expander("🔧 调试信息", expanded=False):
-                        debug_info = result["_debug_info"]
-                        st.write(f"**输出类型:** {debug_info['output_type']}")
-                        st.write(f"**输出长度:** {debug_info['output_length']} 字符")
-                        st.write("**原始输出:**")
-                        st.code(debug_info['raw_output'], language='text')
+                if "answer" in result:
+                    st.success(result["answer"])
                 
-                # 验证结果格式
-                if not isinstance(result, dict):
-                    st.error("❌ 分析结果格式错误：返回结果不是字典格式")
-                    st.json(result)
-                else:
-                    if "answer" in result:
-                        st.success(result["answer"])
+                if "table" in result:
+                    st.markdown("#### 📊 数据表格")
+                    result_df = pd.DataFrame(result["table"]["data"],
+                                           columns=result["table"]["columns"])
+                    st.dataframe(result_df, use_container_width=True)
                     
-                    if "table" in result:
-                        try:
-                            st.markdown("#### 📊 数据表格")
-                            table_data = result["table"]
-                            if "data" in table_data and "columns" in table_data:
-                                result_df = pd.DataFrame(table_data["data"], columns=table_data["columns"])
-                                st.dataframe(result_df, use_container_width=True)
-                                
-                                # 添加导出选项
-                                csv = result_df.to_csv(index=False, encoding='utf-8-sig')
-                                st.download_button(
-                                    label="📥 下载表格数据",
-                                    data=csv,
-                                    file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                    mime="text/csv"
-                                )
-                            else:
-                                st.error("❌ 表格数据格式错误：缺少data或columns字段")
-                                st.json(table_data)
-                        except Exception as e:
-                            st.error(f"❌ 表格处理错误: {str(e)}")
-                            st.json(result["table"])
-                    
-                    if "bar" in result:
-                        try:
-                            st.markdown("#### 📊 柱状图分析")
-                            bar_data = result["bar"]
-                            if "columns" in bar_data and "data" in bar_data:
-                                create_chart(bar_data, "bar")
-                            else:
-                                st.error("❌ 柱状图数据格式错误：缺少columns或data字段")
-                                st.json(bar_data)
-                        except Exception as e:
-                            st.error(f"❌ 柱状图处理错误: {str(e)}")
-                            st.json(result["bar"])
-                    
-                    if "line" in result:
-                        try:
-                            st.markdown("#### 📈 趋势分析")
-                            line_data = result["line"]
-                            if "columns" in line_data and "data" in line_data:
-                                create_chart(line_data, "line")
-                            else:
-                                st.error("❌ 折线图数据格式错误：缺少columns或data字段")
-                                st.json(line_data)
-                        except Exception as e:
-                            st.error(f"❌ 折线图处理错误: {str(e)}")
-                            st.json(result["line"])
-                    
-                    if "pie" in result:
-                        try:
-                            st.markdown("#### 🥧 饼图分析")
-                            pie_data = result["pie"]
-                            if "columns" in pie_data and "data" in pie_data:
-                                create_chart(pie_data, "pie")
-                            else:
-                                st.error("❌ 饼图数据格式错误：缺少columns或data字段")
-                                st.json(pie_data)
-                        except Exception as e:
-                            st.error(f"❌ 饼图处理错误: {str(e)}")
-                            st.json(result["pie"])
-                    
-                    # 添加反馈机制
-                    st.markdown("---")
-                    st.markdown("#### 💭 分析反馈")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("👍 满意"):
-                            st.success("感谢您的反馈！")
-                    with col2:
-                        if st.button("👎 不满意"):
-                            st.info("我们会继续改进，请尝试更具体的问题描述")
-                    with col3:
-                        if st.button("🔄 重新分析"):
-                            st.rerun()
-            
-            except Exception as e:
-                st.error(f"❌ 分析过程中出现错误: {str(e)}")
-                st.info("💡 建议：请尝试重新描述您的问题，或检查数据格式是否正确")
+                    # 添加导出选项
+                    csv = result_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="📥 下载表格数据",
+                        data=csv,
+                        file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                
+                if "bar" in result:
+                    st.markdown("#### 📊 柱状图分析")
+                    create_chart(result["bar"], "bar")
+                
+                if "line" in result:
+                    st.markdown("#### 📈 趋势分析")
+                    create_chart(result["line"], "line")
+                
+                if "pie" in result:
+                    st.markdown("#### 🥧 饼图分析")
+                    create_chart(result["pie"], "pie")
+                
+                # 添加反馈机制
+                st.markdown("---")
+                st.markdown("#### 💭 分析反馈")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("👍 满意"):
+                        st.success("感谢您的反馈！")
+                with col2:
+                    if st.button("👎 不满意"):
+                        st.info("我们会继续改进，请尝试更具体的问题描述")
+                with col3:
+                    if st.button("🔄 重新分析"):
+                        st.rerun()
 
 else:
     if function_choice != "数据上传":
