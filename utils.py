@@ -51,7 +51,7 @@ def cached_dataframe_analysis(df_hash, query_hash, query):
     # 实际的分析逻辑会在dataframe_agent中执行
     return None
 
-def get_enhanced_model(model_choice="gpt-4o"):
+def get_enhanced_model(model_choice="gpt-4o-mini"):
     """获取增强的AI模型"""
     model_configs = {
         "gpt-4o": {
@@ -79,7 +79,7 @@ def get_enhanced_model(model_choice="gpt-4o"):
         **config
     )
 
-def dataframe_agent(df, query, model_choice="gpt-4o", use_cache=True):
+def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True):
     """增强版数据分析智能体"""
     
     # 生成缓存键
