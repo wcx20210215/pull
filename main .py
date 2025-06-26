@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 import streamlit as st
-from utils import dataframe_agent, stream_dataframe_agent, initialize_conversation_memory, add_message_to_memory, get_conversation_history, clear_conversation_history, display_conversation_history
+from utils import dataframe_agent
 from datetime import datetime
 import io
 import json
@@ -662,40 +662,7 @@ if "df" in st.session_state:
         export_data_section(df)
     
     elif function_choice == "AI问答":
-        st.subheader("🤖 AI智能问答 - 流式对话")
-        
-        # 初始化对话记忆
-        initialize_conversation_memory()
-        
-        # 侧边栏控制
-        with st.sidebar:
-            st.markdown("---")
-            st.markdown("### 💬 对话控制")
-            
-            # 对话模式选择
-            conversation_mode = st.radio(
-                "选择对话模式",
-                ["流式对话", "传统问答"]
-            )
-            
-            # 模型选择
-            model_choice = st.selectbox(
-                "选择AI模型",
-                ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
-                index=0
-            )
-            
-            # 对话历史管理
-            history_count = len(get_conversation_history())
-            st.metric("对话轮数", history_count)
-            
-            if st.button("🗑️ 清空对话历史"):
-                clear_conversation_history()
-                st.success("对话历史已清空")
-                st.rerun()
-            
-            if st.button("📜 查看对话历史"):
-                st.session_state.show_history = not st.session_state.get("show_history", False)
+        st.subheader("🤖 AI智能问答")
         
         # 数据概览卡片
         with st.expander("📊 当前数据概览", expanded=False):
@@ -713,185 +680,144 @@ if "df" in st.session_state:
             
             st.write("**列名预览:**", ", ".join(df.columns[:10].tolist()) + ("..." if len(df.columns) > 10 else ""))
         
-        # 显示对话历史
-        if st.session_state.get("show_history", False):
-            with st.expander("💬 对话历史", expanded=True):
-                display_conversation_history()
-        
-        # 流式对话界面
-        if conversation_mode == "流式对话":
-            st.markdown("#### 🚀 流式AI对话")
-            st.info("💡 支持连续对话，AI会记住之前的对话内容")
-            
-            # 聊天输入
-            user_input = st.chat_input("请输入您的问题...")
-            
-            if user_input:
-                # 显示用户消息
-                with st.chat_message("user"):
-                    st.markdown(f"**🧑‍💻 用户**")
-                    st.markdown(user_input)
-                
-                # 显示AI响应（流式）
-                with st.chat_message("assistant"):
-                    st.markdown(f"**🤖 AI助手 ({model_choice})**")
-                    
-                    # 创建空容器用于流式输出
-                    response_container = st.empty()
-                    full_response = ""
-                    
-                    # 流式获取响应
-                    for chunk in stream_dataframe_agent(df, user_input, model_choice):
-                        full_response += chunk
-                        response_container.markdown(full_response)
-                        time.sleep(0.02)  # 控制输出速度
-                    
-                    st.caption(f"⏱️ 模型: {model_choice} | 时间: {time.strftime('%H:%M:%S')}")
-        
-        else:
-            # 传统问答模式
-            st.markdown("#### 💡 智能问题模板")
+        # 快速问题模板 - 增强版
+        st.markdown("#### 💡 智能问题模板")
         
         # 分类问题模板
         template_categories = {
-                "📊 基础统计": [
-                    "显示数据的基本统计信息",
-                    "计算数值列的平均值和标准差",
-                    "找出缺失值最多的列",
-                    "显示数据类型分布"
-                ],
-                "🔍 数据探索": [
-                    "找出数值最大的前5行数据",
-                    "显示各类别的分布情况", 
-                    "找出异常值或离群点",
-                    "计算数值列之间的相关性"
-                ],
-                "📈 可视化分析": [
-                    "生成销售额的柱状图",
-                    "创建时间序列趋势图",
-                    "绘制相关性热力图",
-                    "制作分类数据的饼图"
-                ],
-                "🎯 高级分析": [
-                    "进行聚类分析并可视化结果",
-                    "执行回归分析找出关联关系",
-                    "预测未来趋势",
-                    "识别数据中的模式和规律"
-                ]
+            "📊 基础统计": [
+                "显示数据的基本统计信息",
+                "计算数值列的平均值和标准差",
+                "找出缺失值最多的列",
+                "显示数据类型分布"
+            ],
+            "🔍 数据探索": [
+                "找出数值最大的前5行数据",
+                "显示各类别的分布情况", 
+                "找出异常值或离群点",
+                "计算数值列之间的相关性"
+            ],
+            "📈 可视化分析": [
+                "生成销售额的柱状图",
+                "创建时间序列趋势图",
+                "绘制相关性热力图",
+                "制作分类数据的饼图"
+            ],
+            "🎯 高级分析": [
+                "进行聚类分析并可视化结果",
+                "执行回归分析找出关联关系",
+                "预测未来趋势",
+                "识别数据中的模式和规律"
+            ]
         }
         
-        if not conversation_mode:
-            # 选择问题类别
-            selected_category = st.selectbox(
-                "选择问题类别", 
-                ["自定义问题"] + list(template_categories.keys())
+        # 选择问题类别
+        selected_category = st.selectbox(
+            "选择问题类别", 
+            ["自定义问题"] + list(template_categories.keys())
+        )
+        
+        if selected_category != "自定义问题":
+            selected_template = st.selectbox(
+                "选择具体问题", 
+                template_categories[selected_category]
             )
-            
-            if selected_category != "自定义问题":
-                selected_template = st.selectbox(
-                    "选择具体问题", 
-                    template_categories[selected_category]
+            query = st.text_area(
+                "💬 请输入你关于数据集的问题或可视化需求：",
+                value=selected_template,
+                height=100,
+                help="你可以修改模板问题或直接使用"
+            )
+        else:
+            query = st.text_area(
+                "💬 请输入你关于数据集的问题或可视化需求：",
+                placeholder="例如：显示销售额最高的前5个地区的柱状图，并分析其趋势",
+                height=100,
+                help="支持中文问题，可以要求生成图表、表格或进行数据分析"
+            )
+        
+        # 高级选项
+        with st.expander("⚙️ 高级选项", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                response_format = st.selectbox(
+                    "期望的回答格式",
+                    ["智能选择", "纯文字", "表格数据", "图表可视化", "综合分析"]
                 )
-                query = st.text_area(
-                    "💬 请输入你关于数据集的问题或可视化需求：",
-                    value=selected_template,
-                    height=100,
-                    help="你可以修改模板问题或直接使用"
-                )
-            else:
-                query = st.text_area(
-                    "💬 请输入你关于数据集的问题或可视化需求：",
-                    placeholder="例如：显示销售额最高的前5个地区的柱状图，并分析其趋势",
-                    height=100,
-                    help="支持中文问题，可以要求生成图表、表格或进行数据分析"
-                )
-            
-            # 高级选项
-            with st.expander("⚙️ 高级选项", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    response_format = st.selectbox(
-                        "期望的回答格式",
-                        ["智能选择", "纯文字", "表格数据", "图表可视化", "综合分析"]
-                    )
-                with col2:
-                    analysis_depth = st.selectbox(
-                        "分析深度",
-                        ["标准", "详细", "简洁"]
-                    )
-            
-            # 生成回答按钮
-            col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                button = st.button("🚀 生成AI分析", type="primary", use_container_width=True)
+                analysis_depth = st.selectbox(
+                    "分析深度",
+                    ["标准", "详细", "简洁"]
+                )
+        
+        # 生成回答按钮
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            button = st.button("🚀 生成AI分析", type="primary", use_container_width=True)
+        
+        if query and button:
+            # 构建增强的查询
+            enhanced_query = query
+            if response_format != "智能选择":
+                enhanced_query += f" (请以{response_format}的形式回答)"
+            if analysis_depth != "标准":
+                enhanced_query += f" (分析深度：{analysis_depth})"
             
-            if query and button:
-                # 添加用户消息到记忆
-                add_message_to_memory(query, "user")
+            with st.spinner("🤔 AI正在深度分析中，请稍等..."):
+                start_time = time.time()
+                result = dataframe_agent(df, enhanced_query)
+                end_time = time.time()
                 
-                # 构建增强的查询
-                enhanced_query = query
-                if response_format != "智能选择":
-                    enhanced_query += f" (请以{response_format}的形式回答)"
-                if analysis_depth != "标准":
-                    enhanced_query += f" (分析深度：{analysis_depth})"
+                st.markdown("### 🎯 AI分析结果")
                 
-                with st.spinner("🤔 AI正在深度分析中，请稍等..."):
-                    start_time = time.time()
-                    result = dataframe_agent(df, enhanced_query, model_choice)
-                    end_time = time.time()
+                # 显示处理时间
+                st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
+                
+                if "answer" in result:
+                    st.success(result["answer"])
+                
+                if "table" in result:
+                    st.markdown("#### 📊 数据表格")
+                    result_df = pd.DataFrame(result["table"]["data"],
+                                           columns=result["table"]["columns"])
+                    st.dataframe(result_df, use_container_width=True)
                     
-                    st.markdown("### 🎯 AI分析结果")
-                    
-                    # 显示处理时间
-                    st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒 | 模型: {model_choice}")
-                    
-                    # 将AI响应添加到记忆
-                    if "answer" in result:
-                        add_message_to_memory(result["answer"], "assistant")
-                        st.success(result["answer"])
-                    
-                    if "table" in result:
-                        st.markdown("#### 📊 数据表格")
-                        result_df = pd.DataFrame(result["table"]["data"],
-                                               columns=result["table"]["columns"])
-                        st.dataframe(result_df, use_container_width=True)
-                        
-                        # 添加导出选项
-                        csv = result_df.to_csv(index=False, encoding='utf-8-sig')
-                        st.download_button(
-                            label="📥 下载表格数据",
-                            data=csv,
-                            file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
-                        )
-                    
-                    if "bar" in result:
-                        st.markdown("#### 📊 柱状图分析")
-                        create_chart(result["bar"], "bar")
-                    
-                    if "line" in result:
-                        st.markdown("#### 📈 趋势分析")
-                        create_chart(result["line"], "line")
-                    
-                    if "pie" in result:
-                        st.markdown("#### 🥧 饼图分析")
-                        create_chart(result["pie"], "pie")
-                    
-                    # 添加反馈机制
-                    st.markdown("---")
-                    st.markdown("#### 💭 分析反馈")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("👍 满意"):
-                            st.success("感谢您的反馈！")
-                    with col2:
-                        if st.button("👎 不满意"):
-                            st.info("我们会继续改进，请尝试更具体的问题描述")
-                    with col3:
-                        if st.button("🔄 重新分析"):
-                            st.rerun()
-    else:
-        if function_choice != "数据上传":
-            st.warning("⚠️ 请先上传数据文件才能使用此功能")
-            st.info("👈 请在侧边栏选择'数据上传'功能")
+                    # 添加导出选项
+                    csv = result_df.to_csv(index=False, encoding='utf-8-sig')
+                    st.download_button(
+                        label="📥 下载表格数据",
+                        data=csv,
+                        file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                
+                if "bar" in result:
+                    st.markdown("#### 📊 柱状图分析")
+                    create_chart(result["bar"], "bar")
+                
+                if "line" in result:
+                    st.markdown("#### 📈 趋势分析")
+                    create_chart(result["line"], "line")
+                
+                if "pie" in result:
+                    st.markdown("#### 🥧 饼图分析")
+                    create_chart(result["pie"], "pie")
+                
+                # 添加反馈机制
+                st.markdown("---")
+                st.markdown("#### 💭 分析反馈")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("👍 满意"):
+                        st.success("感谢您的反馈！")
+                with col2:
+                    if st.button("👎 不满意"):
+                        st.info("我们会继续改进，请尝试更具体的问题描述")
+                with col3:
+                    if st.button("🔄 重新分析"):
+                        st.rerun()
+
+else:
+    if function_choice != "数据上传":
+        st.warning("⚠️ 请先上传数据文件才能使用此功能")
+        st.info("👈 请在侧边栏选择'数据上传'功能")
