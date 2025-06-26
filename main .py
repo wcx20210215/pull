@@ -765,57 +765,73 @@ if "df" in st.session_state:
             
             with st.spinner("🤔 AI正在深度分析中，请稍等..."):
                 start_time = time.time()
-                result = dataframe_agent(df, enhanced_query)
-                end_time = time.time()
-                
-                st.markdown("### 🎯 AI分析结果")
-                
-                # 显示处理时间
-                st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
-                
-                if "answer" in result:
-                    st.success(result["answer"])
-                
-                if "table" in result:
-                    st.markdown("#### 📊 数据表格")
-                    result_df = pd.DataFrame(result["table"]["data"],
-                                           columns=result["table"]["columns"])
-                    st.dataframe(result_df, use_container_width=True)
+                try:
+                    result = dataframe_agent(df, enhanced_query)
+                    end_time = time.time()
                     
-                    # 添加导出选项
-                    csv = result_df.to_csv(index=False, encoding='utf-8-sig')
-                    st.download_button(
-                        label="📥 下载表格数据",
-                        data=csv,
-                        file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
-                    )
-                
-                if "bar" in result:
-                    st.markdown("#### 📊 柱状图分析")
-                    create_chart(result["bar"], "bar")
-                
-                if "line" in result:
-                    st.markdown("#### 📈 趋势分析")
-                    create_chart(result["line"], "line")
-                
-                if "pie" in result:
-                    st.markdown("#### 🥧 饼图分析")
-                    create_chart(result["pie"], "pie")
-                
-                # 添加反馈机制
-                st.markdown("---")
-                st.markdown("#### 💭 分析反馈")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("👍 满意"):
-                        st.success("感谢您的反馈！")
-                with col2:
-                    if st.button("👎 不满意"):
-                        st.info("我们会继续改进，请尝试更具体的问题描述")
-                with col3:
-                    if st.button("🔄 重新分析"):
-                        st.rerun()
+                    st.markdown("### 🎯 AI分析结果")
+                    
+                    # 显示处理时间
+                    st.caption(f"⏱️ 分析耗时: {end_time - start_time:.2f}秒")
+                    
+                    # 检查结果是否有效
+                    if not result or not isinstance(result, dict):
+                        st.error("❌ AI分析返回了无效结果，请重新尝试")
+                        st.info("💡 建议：尝试简化您的问题或检查数据格式")
+                    elif "answer" in result:
+                        st.success(result["answer"])
+                    else:
+                        st.warning("⚠️ AI返回了意外的结果格式")
+                        st.json(result)  # 显示原始结果用于调试
+                        
+                except Exception as e:
+                    end_time = time.time()
+                    st.error(f"❌ 分析过程中发生错误: {str(e)}")
+                    st.info("💡 建议：请检查数据格式或尝试重新上传数据")
+                    st.caption(f"⏱️ 错误发生时间: {end_time - start_time:.2f}秒")
+                    
+                # 只有在成功获取结果时才继续处理其他类型的输出
+                if 'result' in locals() and result and isinstance(result, dict):
+                    if "table" in result:
+                        st.markdown("#### 📊 数据表格")
+                        result_df = pd.DataFrame(result["table"]["data"],
+                                               columns=result["table"]["columns"])
+                        st.dataframe(result_df, use_container_width=True)
+                        
+                        # 添加导出选项
+                        csv = result_df.to_csv(index=False, encoding='utf-8-sig')
+                        st.download_button(
+                            label="📥 下载表格数据",
+                            data=csv,
+                            file_name=f"analysis_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    
+                    if "bar" in result:
+                        st.markdown("#### 📊 柱状图分析")
+                        create_chart(result["bar"], "bar")
+                    
+                    if "line" in result:
+                        st.markdown("#### 📈 趋势分析")
+                        create_chart(result["line"], "line")
+                    
+                    if "pie" in result:
+                        st.markdown("#### 🥧 饼图分析")
+                        create_chart(result["pie"], "pie")
+                    
+                    # 添加反馈机制
+                    st.markdown("---")
+                    st.markdown("#### 💭 分析反馈")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button("👍 满意"):
+                            st.success("感谢您的反馈！")
+                    with col2:
+                        if st.button("👎 不满意"):
+                            st.info("我们会继续改进，请尝试更具体的问题描述")
+                    with col3:
+                        if st.button("🔄 重新分析"):
+                            st.rerun()
 
 else:
     if function_choice != "数据上传":
