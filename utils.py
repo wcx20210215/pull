@@ -99,19 +99,16 @@ def dataframe_agent(df, query, model_choice="gpt-4o", use_cache=True):
     model = get_enhanced_model(model_choice)
     
     # 创建智能体
-    agent = create_pandas_dataframe_agent(
-        llm=model,
-        df=df,
-        agent_executor_kwargs={
-            "handle_parsing_errors": True,
-            "max_execution_time": 60,  # 60秒超时
-            "early_stopping_method": "generate"
-        },
-        max_iterations=32,
-        allow_dangerous_code=True,
-        verbose=True,
-        return_intermediate_steps=False
-    )
+    try:
+        agent = create_pandas_dataframe_agent(
+            llm=model,
+            df=df,
+            verbose=True,
+            allow_dangerous_code=True
+        )
+    except Exception as e:
+        st.error(f"创建智能体时出错: {str(e)}")
+        return {"answer": "抱歉，AI智能体初始化失败，请稍后重试。"}
 
     # 增强的提示词
     enhanced_prompt = PROMPT_TEMPLATE + f"""
