@@ -256,11 +256,10 @@ def cached_dataframe_analysis(df_hash, query_hash, query):
     return None
 
 def get_enhanced_model():
-    """获取AI模型 - 固定使用gpt-4o-mini"""
     return ChatOpenAI(
         base_url='https://twapi.openai-hk.com/v1',
         api_key=st.secrets['API_KEY'],
-        model="gpt-4o-mini",
+        model="gpt-4.1",
         temperature=0,
         max_tokens=4096
     )
