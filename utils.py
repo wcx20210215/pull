@@ -260,7 +260,7 @@ def get_enhanced_model():
     return ChatOpenAI(
         base_url='https://twapi.openai-hk.com/v1',
         api_key=st.secrets['API_KEY'],
-        model="gpt-4.1-mini",
+        model="gpt-4o-mini",
         temperature=0,
         max_tokens=4096
     )
