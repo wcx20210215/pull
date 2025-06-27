@@ -264,7 +264,7 @@ def get_enhanced_model(model_choice="gpt-4o-mini"):
             "max_tokens": 8192
         },
         "gpt-4o-mini": {
-            "model": "gpt-4o-mini", 
+            "model": "gpt-4o-mini",
             "temperature": 0,
             "max_tokens": 4096
         },
