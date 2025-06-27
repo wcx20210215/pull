@@ -255,7 +255,7 @@ def cached_dataframe_analysis(df_hash, query_hash, query):
     # 实际的分析逻辑会在dataframe_agent中执行
     return None
 
-def get_enhanced_model(model_choice="gpt-4.1-mini"):
+def get_enhanced_model(model_choice="gpt-4o-mini"):
     """获取增强的AI模型"""
     model_configs = {
         "gpt-4o": {
@@ -264,7 +264,7 @@ def get_enhanced_model(model_choice="gpt-4.1-mini"):
             "max_tokens": 8192
         },
         "gpt-4o-mini": {
-            "model": "gpt-4.1-mini",
+            "model": "gpt-4o-mini", 
             "temperature": 0,
             "max_tokens": 4096
         },
@@ -275,7 +275,7 @@ def get_enhanced_model(model_choice="gpt-4.1-mini"):
         }
     }
     
-    config = model_configs.get(model_choice, model_configs["gpt-4.1-mini"])
+    config = model_configs.get(model_choice, model_configs["gpt-4o-mini"])
     
     return ChatOpenAI(
         base_url='https://twapi.openai-hk.com/v1',
@@ -283,7 +283,7 @@ def get_enhanced_model(model_choice="gpt-4.1-mini"):
         **config
     )
 
-def dataframe_agent(df, query, model_choice="gpt-4.1-mini", use_cache=True,
+def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True,
                    session_id=None, enable_streaming=False, stream_container=None):
     """增强版数据分析智能体 - 支持记忆和流式输出"""
     
