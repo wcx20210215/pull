@@ -62,19 +62,42 @@ def heavy_computation(df, operation):
 
 def create_chart(input_data, chart_type):
     """生成统计图表 - 增强版"""
-    df_data = pd.DataFrame(
-        data={
-            "x": input_data["columns"],
-            "y": input_data["data"]
-        }
-    ).set_index("x")
+    # 数据验证和处理
+    columns = input_data.get("columns", [])
+    data = input_data.get("data", [])
+    
+    # 确保数据长度一致
+    if len(columns) != len(data):
+        min_len = min(len(columns), len(data))
+        if min_len == 0:
+            st.error("图表数据为空，无法生成图表")
+            return
+        columns = columns[:min_len]
+        data = data[:min_len]
+        st.warning(f"数据长度不一致，已截取前{min_len}个数据点")
+    
+    # 确保数据不为空
+    if not columns or not data:
+        st.error("图表数据为空，无法生成图表")
+        return
+    
+    try:
+        df_data = pd.DataFrame(
+            data={
+                "x": columns,
+                "y": data
+            }
+        ).set_index("x")
+    except Exception as e:
+        st.error(f"创建图表数据时出错: {str(e)}")
+        return
     
     if chart_type == "bar":
         fig = px.bar(
-            x=input_data["columns"], 
-            y=input_data["data"], 
+            x=columns, 
+            y=data, 
             title="📊 柱状图分析", 
-            color=input_data["data"],
+            color=data,
             color_continuous_scale="viridis",
             labels={'x': '类别', 'y': '数值'}
         )
@@ -88,8 +111,8 @@ def create_chart(input_data, chart_type):
         
     elif chart_type == "line":
         fig = px.line(
-            x=input_data["columns"], 
-            y=input_data["data"], 
+            x=columns, 
+            y=data, 
             title="📈 趋势分析", 
             markers=True,
             line_shape='spline'
@@ -109,8 +132,8 @@ def create_chart(input_data, chart_type):
         
     elif chart_type == "pie":
         fig = px.pie(
-            values=input_data["data"], 
-            names=input_data["columns"], 
+            values=data, 
+            names=columns, 
             title="🥧 饼图分析",
             color_discrete_sequence=px.colors.qualitative.Set3
         )
