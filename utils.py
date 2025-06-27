@@ -255,35 +255,17 @@ def cached_dataframe_analysis(df_hash, query_hash, query):
     # 实际的分析逻辑会在dataframe_agent中执行
     return None
 
-def get_enhanced_model(model_choice="gpt-4o-mini"):
-    """获取增强的AI模型"""
-    model_configs = {
-        "gpt-4o": {
-            "model": "gpt-4o",
-            "temperature": 0.1,
-            "max_tokens": 8192
-        },
-        "gpt-4o-mini": {
-            "model": "gpt-4o-mini",
-            "temperature": 0,
-            "max_tokens": 4096
-        },
-        "gpt-4-turbo": {
-            "model": "gpt-4-turbo-preview",
-            "temperature": 0.2,
-            "max_tokens": 8192
-        }
-    }
-    
-    config = model_configs.get(model_choice, model_configs["gpt-4o-mini"])
-    
+def get_enhanced_model():
+    """获取AI模型 - 固定使用gpt-4o-mini"""
     return ChatOpenAI(
         base_url='https://twapi.openai-hk.com/v1',
         api_key=st.secrets['API_KEY'],
-        **config
+        model="gpt-4o-mini",
+        temperature=0,
+        max_tokens=4096
     )
 
-def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True,
+def dataframe_agent(df, query, use_cache=True,
                    session_id=None, enable_streaming=False, stream_container=None):
     """增强版数据分析智能体 - 支持记忆和流式输出"""
     
@@ -330,8 +312,8 @@ def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True,
         except:
             pass
     
-    # 选择模型
-    model = get_enhanced_model(model_choice)
+    # 获取模型
+    model = get_enhanced_model()
     
     # 创建智能体
     try:
@@ -425,31 +407,14 @@ def dataframe_agent(df, query, model_choice="gpt-4o-mini", use_cache=True,
         
         return error_result
 
-def multi_model_analysis(df, query, models=["gpt-4o", "gpt-4o-mini"]):
-    """多模型集成分析"""
-    results = []
-    
-    for model in models:
-        try:
-            result = dataframe_agent(df, query, model_choice=model, use_cache=False)
-            results.append({"model": model, "result": result})
-        except Exception as e:
-            print(f"模型 {model} 分析失败: {e}")
-            continue
-    
-    if not results:
-        return {"answer": "所有模型分析都失败了，请检查数据或问题"}
-    
-    # 简单的结果合并策略（可以根据需要改进）
-    if len(results) == 1:
-        return results[0]["result"]
-    
-    # 如果有多个结果，返回第一个成功的结果，并添加备注
-    primary_result = results[0]["result"]
-    if "answer" in primary_result:
-        primary_result["answer"] += f" (基于{len(results)}个模型的分析结果)"
-    
-    return primary_result
+def multi_model_analysis(df, query):
+    """数据分析 - 使用单一模型"""
+    try:
+        result = dataframe_agent(df, query, use_cache=False)
+        return result
+    except Exception as e:
+        print(f"模型分析失败: {e}")
+        return {"answer": "分析失败，请检查数据或问题"}
 
 # 记忆管理辅助函数
 def get_session_id():
